@@ -26,10 +26,21 @@ data class TempleNotice(
     val createdAt: Long = 0L
 )
 
-data class GalleryImage(
-    val id: String = "",
-    val titleSi: String = "",
-    val titleEn: String = "",
-    val imageUrl: String = "",
-    val createdAt: Long = 0L
+data class TempleSettings(
+    val templeImageUrl: String = "",
+    val monkImageUrl: String = "",
+    val monkNameSi: String = "",
+    val monkNameEn: String = "",
+    val monkTitleSi: String = "විහාරාධිපති ස්වාමීන් වහන්සේ",
+    val monkTitleEn: String = "Temple Resident Monk",
+    val facebookUrl: String = "",
+    val sabhapathiNameSi: String = "",
+    val sabhapathiNameEn: String = "",
+    val sabhapathiPhone: String = "",
+    val bandagarikaNameSi: String = "",
+    val bandagarikaNameEn: String = "",
+    val bandagarikaPhone: String = "",
+    val lekamNameSi: String = "",
+    val lekamNameEn: String = "",
+    val lekamPhone: String = ""
 )
