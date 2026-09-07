@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
 
@@ -50,15 +51,12 @@ class TempleRepository(context: Context) {
             }
     }
 
-    fun observeGallery(onUpdate: (List<GalleryImage>) -> Unit): ListenerRegistration? {
+    fun observeSettings(onUpdate: (TempleSettings) -> Unit): ListenerRegistration? {
         val firestore = db ?: return null
-        return firestore.collection("gallery")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
+        return firestore.collection("settings").document("main")
             .addSnapshotListener { snapshot, error ->
-                if (error == null && snapshot != null) {
-                    onUpdate(snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(GalleryImage::class.java)?.copy(id = doc.id)
-                    })
+                if (error == null && snapshot != null && snapshot.exists()) {
+                    snapshot.toObject(TempleSettings::class.java)?.let(onUpdate)
                 }
             }
     }
@@ -133,48 +131,34 @@ class TempleRepository(context: Context) {
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
 
-    fun uploadGalleryImage(
-        imageUri: Uri,
-        titleSi: String,
-        titleEn: String,
-        onResult: (Result<Unit>) -> Unit
-    ) {
-        val firestore = db
-        val firebaseStorage = storage
-        if (firestore == null || firebaseStorage == null) {
-            onResult(Result.failure(IllegalStateException("Firebase is not configured.")))
-            return
-        }
-
-        val imageRef = firebaseStorage.reference.child("gallery/${UUID.randomUUID()}.jpg")
-        imageRef.putFile(imageUri)
-            .continueWithTask { task ->
-                if (!task.isSuccessful) throw task.exception ?: IllegalStateException("Image upload failed.")
-                imageRef.downloadUrl
-            }
-            .addOnSuccessListener { url ->
-                val item = GalleryImage(
-                    titleSi = titleSi,
-                    titleEn = titleEn,
-                    imageUrl = url.toString(),
-                    createdAt = System.currentTimeMillis()
-                )
-                firestore.collection("gallery").add(item)
-                    .addOnSuccessListener { onResult(Result.success(Unit)) }
-                    .addOnFailureListener { onResult(Result.failure(it)) }
-            }
+    fun saveSettings(settings: TempleSettings, onResult: (Result<Unit>) -> Unit) {
+        val firestore = db ?: return onResult(Result.failure(IllegalStateException("Firebase is not configured.")))
+        firestore.collection("settings").document("main")
+            .set(settings, SetOptions.merge())
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
 
-    fun deleteGalleryImage(item: GalleryImage, onResult: (Result<Unit>) -> Unit = {}) {
-        val firestore = db ?: return onResult(Result.failure(IllegalStateException("Firebase is not configured.")))
-        firestore.collection("gallery").document(item.id).delete()
-            .addOnSuccessListener {
-                if (item.imageUrl.isNotBlank()) {
-                    runCatching { FirebaseStorage.getInstance().getReferenceFromUrl(item.imageUrl).delete() }
+    fun uploadSettingsImage(
+        imageUri: Uri,
+        filePrefix: String,
+        onResult: (Result<String>) -> Unit
+    ) {
+        val firebaseStorage = storage
+        if (firebaseStorage == null) {
+            onResult(Result.failure(IllegalStateException("Firebase Storage is not configured.")))
+            return
+        }
+
+        val imageRef = firebaseStorage.reference.child("settings/${filePrefix}_${UUID.randomUUID()}.jpg")
+        imageRef.putFile(imageUri)
+            .continueWithTask { task ->
+                if (!task.isSuccessful) {
+                    throw task.exception ?: IllegalStateException("Image upload failed.")
                 }
-                onResult(Result.success(Unit))
+                imageRef.downloadUrl
             }
+            .addOnSuccessListener { url -> onResult(Result.success(url.toString())) }
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
 }
