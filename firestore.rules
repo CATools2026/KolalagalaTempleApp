@@ -16,7 +16,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /gallery/{document=**} {
+    match /settings/{document=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
