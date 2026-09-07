@@ -10,6 +10,15 @@
         android:roundIcon="@drawable/ic_temple"
         android:supportsRtl="true"
         android:theme="@style/Theme.KolalagalaTempleApp">
+
+        <service
+            android:name=".TempleMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
