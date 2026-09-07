@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1093528113391",
+    "project_id": "kolalagala-temple-app",
+    "storage_bucket": "kolalagala-temple-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1093528113391:android:192b8bf1f23f8a87674b1a",
+        "android_client_info": {
+          "package_name": "com.catools.templeapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEEi3jp-0qXLefvK_e6vaSxIUVY3dtrb4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
