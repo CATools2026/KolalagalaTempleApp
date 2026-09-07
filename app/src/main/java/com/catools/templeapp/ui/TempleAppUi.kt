@@ -1,30 +1,32 @@
 package com.catools.templeapp.ui
 
+import android.content.Intent
 import android.net.Uri
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,7 +44,6 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
@@ -50,16 +51,15 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,7 +71,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -87,27 +86,35 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
-import com.catools.templeapp.data.GalleryImage
+import com.catools.templeapp.R
 import com.catools.templeapp.data.SampleData
 import com.catools.templeapp.data.TempleEvent
 import com.catools.templeapp.data.TempleNotice
 import com.catools.templeapp.data.TempleRepository
+import com.catools.templeapp.data.TempleSettings
 import com.catools.templeapp.ui.theme.TempleDeepGold
 import com.catools.templeapp.ui.theme.TempleGold
 import com.catools.templeapp.ui.theme.TempleSoftGold
 
 private enum class AppLanguage { SI, EN }
-private enum class Page { HOME, POOJA, EVENTS, DONATIONS, MORE, GALLERY, ABOUT, CONTACT, NOTICES, ADMIN }
+private enum class Page { HOME, POOJA, EVENTS, FACEBOOK, MORE, ABOUT, CONTACT, NOTICES, ADMIN }
 
 private fun tr(language: AppLanguage, si: String, en: String): String =
     if (language == AppLanguage.SI) si else en
+
+private fun normalizedUrl(url: String): String {
+    val value = url.trim()
+    return if (value.startsWith("http://") || value.startsWith("https://")) value else "https://$value"
+}
 
 @Composable
 fun TempleApp(repository: TempleRepository) {
@@ -119,16 +126,16 @@ fun TempleApp(repository: TempleRepository) {
     var page by remember { mutableStateOf(Page.HOME) }
     var events by remember { mutableStateOf(SampleData.events) }
     var notices by remember { mutableStateOf(SampleData.notices) }
-    var gallery by remember { mutableStateOf(emptyList<GalleryImage>()) }
+    var settings by remember { mutableStateOf(TempleSettings()) }
 
     DisposableEffect(repository.firebaseReady) {
         val eventListener = repository.observeEvents { events = it }
         val noticeListener = repository.observeNotices { notices = it }
-        val galleryListener = repository.observeGallery { gallery = it }
+        val settingsListener = repository.observeSettings { settings = it }
         onDispose {
             eventListener?.remove()
             noticeListener?.remove()
-            galleryListener?.remove()
+            settingsListener?.remove()
         }
     }
 
@@ -149,24 +156,24 @@ fun TempleApp(repository: TempleRepository) {
                     language = language,
                     events = events,
                     notices = notices,
+                    settings = settings,
                     firebaseReady = repository.firebaseReady,
                     onLanguage = ::toggleLanguage,
                     onPage = { page = it }
                 )
                 Page.POOJA -> PoojaTimesScreen(language)
                 Page.EVENTS -> EventsScreen(language, events)
-                Page.DONATIONS -> DonationsScreen(language)
-                Page.MORE -> MoreScreen(language, repository.firebaseReady, ::toggleLanguage) { page = it }
-                Page.GALLERY -> GalleryScreen(language, gallery) { page = Page.MORE }
+                Page.FACEBOOK -> FacebookScreen(language, settings)
+                Page.MORE -> MoreScreen(language, repository.firebaseReady, settings, ::toggleLanguage) { page = it }
                 Page.ABOUT -> AboutScreen(language) { page = Page.MORE }
-                Page.CONTACT -> ContactScreen(language) { page = Page.MORE }
+                Page.CONTACT -> ContactScreen(language, settings) { page = Page.MORE }
                 Page.NOTICES -> NoticesScreen(language, notices) { page = Page.HOME }
                 Page.ADMIN -> AdminScreen(
                     language = language,
                     repository = repository,
                     events = events,
                     notices = notices,
-                    gallery = gallery,
+                    settings = settings,
                     onBack = { page = Page.MORE }
                 )
             }
@@ -178,9 +185,9 @@ fun TempleApp(repository: TempleRepository) {
 private fun MainBottomBar(page: Page, language: AppLanguage, onPage: (Page) -> Unit) {
     val items = listOf(
         Triple(Page.HOME, tr(language, "මුල් පිටුව", "Home"), Icons.Default.Home),
-        Triple(Page.POOJA, tr(language, "පූජා වේලාවන්", "Pooja Times"), Icons.Default.CalendarMonth),
+        Triple(Page.POOJA, tr(language, "පූජා", "Pooja"), Icons.Default.CalendarMonth),
         Triple(Page.EVENTS, tr(language, "පිංකම්", "Events"), Icons.Default.Spa),
-        Triple(Page.DONATIONS, tr(language, "පරිත්‍යාග", "Donations"), Icons.Default.Favorite),
+        Triple(Page.FACEBOOK, "Facebook", Icons.Default.Public),
         Triple(Page.MORE, tr(language, "තවත්", "More"), Icons.Default.MoreHoriz)
     )
     NavigationBar(
@@ -203,6 +210,7 @@ private fun HomeScreen(
     language: AppLanguage,
     events: List<TempleEvent>,
     notices: List<TempleNotice>,
+    settings: TempleSettings,
     firebaseReady: Boolean,
     onLanguage: () -> Unit,
     onPage: (Page) -> Unit
@@ -211,21 +219,12 @@ private fun HomeScreen(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        item {
-            HomeTopHeader(language, firebaseReady, onLanguage)
-        }
-        item {
-            HeroCard(language)
-        }
-        item {
-            QuickActionGrid(language, onPage)
-        }
-        item {
-            AnnouncementPanel(language, notices, onSeeAll = { onPage(Page.NOTICES) })
-        }
-        item {
-            QuotePanel(language)
-        }
+        item { HomeTopHeader(language, firebaseReady, onLanguage) }
+        item { HeroCard(language, settings) }
+        item { QuickActionGrid(language, onPage) }
+        item { AnnouncementPanel(language, notices, onSeeAll = { onPage(Page.NOTICES) }) }
+        item { MonkProfileCard(language, settings) }
+        item { QuotePanel(language) }
         if (events.isNotEmpty()) {
             item {
                 SectionTitle(
@@ -233,9 +232,7 @@ private fun HomeScreen(
                     tr(language, "විස්තර බලන්න", "View details")
                 )
             }
-            item {
-                EventCard(events.first(), language, Modifier.padding(horizontal = 18.dp))
-            }
+            item { EventCard(events.first(), language, Modifier.padding(horizontal = 18.dp)) }
         }
     }
 }
@@ -253,17 +250,8 @@ private fun HomeTopHeader(language: AppLanguage, firebaseReady: Boolean, onLangu
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                "Kolalagala Ancient Temple",
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Bold,
-                color = TempleDeepGold
-            )
-            Text(
-                tr(language, "සාදරයෙන් පිළිගනිමු", "Welcome"),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 15.sp
-            )
+            Text("Kolalagala Ancient Temple", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = TempleDeepGold)
+            Text(tr(language, "සාදරයෙන් පිළිගනිමු", "Welcome"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
         }
         TextButton(onClick = onLanguage) {
             Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -273,71 +261,51 @@ private fun HomeTopHeader(language: AppLanguage, firebaseReady: Boolean, onLangu
         Box {
             Icon(Icons.Default.Notifications, contentDescription = null, tint = TempleDeepGold, modifier = Modifier.size(28.dp))
             if (firebaseReady) {
-                Box(
-                    Modifier.size(8.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFE53935))
-                        .align(Alignment.TopEnd)
-                )
+                Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFE53935)).align(Alignment.TopEnd))
             }
         }
     }
 }
 
 @Composable
-private fun HeroCard(language: AppLanguage) {
+private fun HeroCard(language: AppLanguage, settings: TempleSettings) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
         shape = RoundedCornerShape(28.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().height(300.dp)
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFF261A0D), Color(0xFF6A4709), Color(0xFFD9A23A))
+        Box(modifier = Modifier.fillMaxWidth().height(300.dp)) {
+            if (settings.templeImageUrl.isBlank()) {
+                Image(
+                    painter = painterResource(R.drawable.temple_home),
+                    contentDescription = "Kolalagala Ancient Temple",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                AsyncImage(
+                    model = settings.templeImageUrl,
+                    contentDescription = "Kolalagala Ancient Temple",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    Modifier.matchParentSize().background(
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f)))
                     )
                 )
-        ) {
-            Icon(
-                Icons.Default.AccountBalance,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.22f),
-                modifier = Modifier.size(230.dp).align(Alignment.CenterEnd).padding(end = 12.dp)
-            )
-            Column(
-                modifier = Modifier.align(Alignment.BottomStart).padding(26.dp).fillMaxWidth(0.82f)
-            ) {
-                Text(
-                    tr(language, "සාමයේ නවාතැනක් • උසස් සිතකට මඟක්", "A PLACE OF PEACE • A PATH TO HIGHER MINDS"),
-                    color = Color(0xFFFFC739),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.2.sp
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    tr(language, "කොළලෑගල\nපුරාණ විහාරස්ථානය", "Kolalagala\nAncient Temple"),
-                    color = Color.White,
-                    fontSize = 30.sp,
-                    lineHeight = 34.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    tr(language, "සියලු සත්වයෝ සුවපත් වෙත්වා.\nසියලු සත්වයෝ සාමයෙන් වෙසෙත්වා.", "May all beings be happy,\nMay all beings be at peace."),
-                    color = Color.White.copy(alpha = 0.92f),
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp
-                )
+                Column(Modifier.align(Alignment.BottomStart).padding(24.dp)) {
+                    Text(
+                        tr(language, "සාමයේ නවාතැනක් • උසස් සිතකට මඟක්", "A PLACE OF PEACE • A PATH TO HIGHER MINDS"),
+                        color = Color(0xFFFFC739), fontSize = 11.sp, fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        tr(language, "කොළලෑගල පුරාණ විහාරස්ථානය", "Kolalagala Ancient Temple"),
+                        color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold
+                    )
+                }
             }
-            Text(
-                "“Sādhu Sādhu Sādhu”",
-                color = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp),
-                fontStyle = FontStyle.Italic,
-                fontSize = 13.sp
-            )
         }
     }
 }
@@ -345,20 +313,18 @@ private fun HeroCard(language: AppLanguage) {
 @Composable
 private fun QuickActionGrid(language: AppLanguage, onPage: (Page) -> Unit) {
     val actions = listOf(
-        ActionItem(tr(language, "පූජා වේලාවන්", "Pooja Times"), tr(language, "දෛනික පූජා", "Daily Dhamma Services"), Icons.Default.AccessTime, Page.POOJA),
-        ActionItem(tr(language, "පිංකම්", "Events"), tr(language, "ඉදිරි වැඩසටහන්", "Upcoming Programs"), Icons.Default.Event, Page.EVENTS),
-        ActionItem(tr(language, "පරිත්‍යාග", "Donations"), tr(language, "විහාරස්ථානයට සහාය", "Support the Temple"), Icons.Default.Favorite, Page.DONATIONS),
-        ActionItem(tr(language, "ගැලරිය", "Gallery"), tr(language, "ඡායාරූප හා මතක", "Photos & Moments"), Icons.Default.PhotoLibrary, Page.GALLERY),
-        ActionItem(tr(language, "විහාරය ගැන", "About Temple"), tr(language, "ඉතිහාසය හා වැදගත්කම", "History & Significance"), Icons.Default.AccountBalance, Page.ABOUT),
-        ActionItem(tr(language, "සම්බන්ධ වන්න", "Contact"), tr(language, "අප අමතන්න", "Get in Touch"), Icons.Default.Phone, Page.CONTACT)
+        ActionItem(tr(language, "පූජා වේලාවන්", "Pooja Times"), tr(language, "දෛනික පූජා", "Daily services"), Icons.Default.AccessTime, Page.POOJA),
+        ActionItem(tr(language, "පිංකම්", "Events"), tr(language, "ඉදිරි වැඩසටහන්", "Upcoming programs"), Icons.Default.Event, Page.EVENTS),
+        ActionItem("Facebook", tr(language, "ඡායාරූප හා වීඩියෝ", "Photos & videos"), Icons.Default.Public, Page.FACEBOOK),
+        ActionItem(tr(language, "විහාරය ගැන", "About Temple"), tr(language, "ඉතිහාසය හා වැදගත්කම", "History & significance"), Icons.Default.AccountBalance, Page.ABOUT),
+        ActionItem(tr(language, "සම්බන්ධ වන්න", "Contact"), tr(language, "දායක සභා සම්බන්ධතා", "Committee contacts"), Icons.Default.Phone, Page.CONTACT),
+        ActionItem(tr(language, "දැනුම්දීම්", "Announcements"), tr(language, "අලුත්ම තොරතුරු", "Latest updates"), Icons.Default.Campaign, Page.NOTICES)
     )
 
     Column(Modifier.padding(horizontal = 18.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         actions.chunked(3).forEach { rowItems ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                rowItems.forEach { action ->
-                    HomeActionCard(action, Modifier.weight(1f)) { onPage(action.page) }
-                }
+                rowItems.forEach { action -> HomeActionCard(action, Modifier.weight(1f)) { onPage(action.page) } }
             }
         }
     }
@@ -411,15 +377,9 @@ private fun AnnouncementPanel(language: AppLanguage, notices: List<TempleNotice>
             }
             if (latest != null) {
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.Top) {
-                    Box(Modifier.padding(top = 7.dp).size(10.dp).clip(CircleShape).background(Color(0xFFFFB300)))
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text(tr(language, latest.titleSi, latest.titleEn), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Text(tr(language, latest.messageSi, latest.messageEn), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 2)
-                        if (latest.date.isNotBlank()) Text(latest.date, color = TempleDeepGold, fontSize = 12.sp)
-                    }
-                }
+                Text(tr(language, latest.titleSi, latest.titleEn), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text(tr(language, latest.messageSi, latest.messageEn), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 3)
+                if (latest.date.isNotBlank()) Text(latest.date, color = TempleDeepGold, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
             } else {
                 Text(tr(language, "දැනුම්දීම් නොමැත", "No announcements yet"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -428,29 +388,55 @@ private fun AnnouncementPanel(language: AppLanguage, notices: List<TempleNotice>
 }
 
 @Composable
+private fun MonkProfileCard(language: AppLanguage, settings: TempleSettings) {
+    val monkName = tr(language, settings.monkNameSi, settings.monkNameEn)
+    val monkTitle = tr(language, settings.monkTitleSi, settings.monkTitleEn)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 18.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = CircleShape, color = TempleSoftGold, modifier = Modifier.size(92.dp)) {
+                if (settings.monkImageUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = settings.monkImageUrl,
+                        contentDescription = monkName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = TempleGold, modifier = Modifier.size(46.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(tr(language, "අපගේ ස්වාමීන් වහන්සේ", "Our Temple Monk"), color = TempleGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(if (monkName.isBlank()) monkTitle else monkName, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = TempleDeepGold)
+                if (monkName.isNotBlank() && monkTitle.isNotBlank()) {
+                    Text(monkTitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun QuotePanel(language: AppLanguage) {
     Box(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)
-            .height(180.dp)
-            .clip(RoundedCornerShape(24.dp))
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 2.dp)
+            .height(150.dp).clip(RoundedCornerShape(24.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFFFFFAF1), Color(0xFFFFE6AE))))
     ) {
-        Icon(
-            Icons.Default.Spa,
-            contentDescription = null,
-            tint = TempleGold.copy(alpha = 0.2f),
-            modifier = Modifier.size(130.dp).align(Alignment.BottomEnd).padding(10.dp)
-        )
         Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 tr(language, "“සියලු සත්වයෝ සුවපත් වෙත්වා,\nසියලු සත්වයෝ සාමයෙන් වෙසෙත්වා.”", "“May all beings be happy,\nMay all beings be at peace.”"),
-                textAlign = TextAlign.Center,
-                color = TempleDeepGold,
-                fontSize = 20.sp,
-                fontStyle = FontStyle.Italic,
-                lineHeight = 26.sp
+                textAlign = TextAlign.Center, color = TempleDeepGold, fontSize = 18.sp, fontStyle = FontStyle.Italic, lineHeight = 25.sp
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text("— Buddha", color = TempleDeepGold)
         }
     }
@@ -467,9 +453,7 @@ private fun SectionTitle(title: String, trailing: String? = null) {
 @Composable
 private fun PageHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onBack != null) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = null) }
-        }
+        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = null) }
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = TempleDeepGold)
             subtitle?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
@@ -482,11 +466,7 @@ private fun PoojaTimesScreen(language: AppLanguage) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { PageHeader(tr(language, "පූජා වේලාවන්", "Pooja Times"), tr(language, "දෛනික ආගමික වැඩසටහන්", "Daily temple services")) }
         items(SampleData.poojaTimes) { item ->
-            Card(
-                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 7.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
+            Card(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 7.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Surface(shape = CircleShape, color = TempleSoftGold, modifier = Modifier.size(50.dp)) {
                         Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.AccessTime, null, tint = TempleGold) }
@@ -541,31 +521,45 @@ private fun EventCard(event: TempleEvent, language: AppLanguage, modifier: Modif
 }
 
 @Composable
-private fun DonationsScreen(language: AppLanguage) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { PageHeader(tr(language, "පරිත්‍යාග", "Donations"), tr(language, "විහාරස්ථානයේ සේවාවන්ට දායක වන්න", "Support the temple and its services")) }
-        item {
-            Card(Modifier.fillMaxWidth().padding(18.dp), shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1D8))) {
-                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.Favorite, null, tint = TempleGold, modifier = Modifier.size(54.dp))
-                    Spacer(Modifier.height(14.dp))
-                    Text(tr(language, "ඔබගේ දායකත්වයට පින්", "Thank you for your support"), fontWeight = FontWeight.Bold, fontSize = 20.sp, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        tr(language, "බැංකු ගිණුම් සහ පරිත්‍යාග විස්තර විහාරස්ථානයෙන් තහවුරු කර මෙහි එක් කළ හැක.", "Verified bank and donation details can be added here by the temple administration."),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+private fun FacebookScreen(language: AppLanguage, settings: TempleSettings) {
+    val context = LocalContext.current
+    val url = settings.facebookUrl.trim()
+    Column(Modifier.fillMaxSize()) {
+        PageHeader("Facebook", tr(language, "විහාරස්ථානයේ ඡායාරූප හා වීඩියෝ", "Temple photos and videos"))
+        if (url.isBlank()) {
+            EmptyState(tr(language, "Facebook පිටුව Admin මගින් එක් කරන්න.", "Add the temple Facebook page from Admin."))
+        } else {
+            OutlinedButton(
+                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(normalizedUrl(url)))) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Public, null)
+                Spacer(Modifier.width(8.dp))
+                Text(tr(language, "Facebook App / Browser එකෙන් විවෘත කරන්න", "Open in Facebook / Browser"))
             }
+            AndroidView(
+                modifier = Modifier.fillMaxSize().padding(top = 6.dp),
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        webViewClient = WebViewClient()
+                        loadUrl(normalizedUrl(url))
+                    }
+                },
+                update = { webView ->
+                    val target = normalizedUrl(url)
+                    if (webView.url != target) webView.loadUrl(target)
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun MoreScreen(language: AppLanguage, firebaseReady: Boolean, onLanguage: () -> Unit, onPage: (Page) -> Unit) {
+private fun MoreScreen(language: AppLanguage, firebaseReady: Boolean, settings: TempleSettings, onLanguage: () -> Unit, onPage: (Page) -> Unit) {
     val rows = listOf(
-        MoreItem(tr(language, "ඡායාරූප ගැලරිය", "Gallery"), Icons.Default.PhotoLibrary, Page.GALLERY),
+        MoreItem("Facebook", Icons.Default.Public, Page.FACEBOOK),
         MoreItem(tr(language, "විහාරස්ථානය පිළිබඳ", "About Temple"), Icons.Default.AccountBalance, Page.ABOUT),
         MoreItem(tr(language, "සම්බන්ධ වන්න", "Contact"), Icons.Default.Phone, Page.CONTACT),
         MoreItem(tr(language, "පරිපාලක පිවිසුම", "Admin Login"), Icons.Default.AdminPanelSettings, Page.ADMIN)
@@ -590,12 +584,12 @@ private fun MoreScreen(language: AppLanguage, firebaseReady: Boolean, onLanguage
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (firebaseReady) Icons.Default.CloudDone else Icons.Default.CloudOff, null, tint = if (firebaseReady) Color(0xFF3D7B37) else Color(0xFFB85C26))
                     Spacer(Modifier.width(12.dp))
-                    Text(
-                        if (firebaseReady) tr(language, "Firebase සම්බන්ධයි", "Firebase connected") else tr(language, "Firebase සැකසුම අවශ්‍යයි", "Firebase setup required"),
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text(if (firebaseReady) tr(language, "Firebase සම්බන්ධයි", "Firebase connected") else tr(language, "Firebase සැකසුම අවශ්‍යයි", "Firebase setup required"), fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
+        if (settings.monkNameSi.isNotBlank() || settings.monkNameEn.isNotBlank()) {
+            item { MonkProfileCard(language, settings) }
         }
         items(rows) { item ->
             Card(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp).clickable { onPage(item.page) }, shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -615,38 +609,6 @@ private fun MoreScreen(language: AppLanguage, firebaseReady: Boolean, onLanguage
 private data class MoreItem(val title: String, val icon: ImageVector, val page: Page)
 
 @Composable
-private fun GalleryScreen(language: AppLanguage, gallery: List<GalleryImage>, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        PageHeader(tr(language, "ඡායාරූප ගැලරිය", "Gallery"), tr(language, "විහාරස්ථාන මතක සටහන්", "Temple photos and moments"), onBack)
-        if (gallery.isEmpty()) {
-            EmptyState(tr(language, "ඡායාරූප තවම එක් කර නැත", "No gallery photos have been added yet"))
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(gallery) { photo ->
-                    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column {
-                            AsyncImage(
-                                model = photo.imageUrl,
-                                contentDescription = tr(language, photo.titleSi, photo.titleEn),
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth().aspectRatio(1f)
-                            )
-                            Text(tr(language, photo.titleSi, photo.titleEn), modifier = Modifier.padding(12.dp), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun AboutScreen(language: AppLanguage, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { PageHeader(tr(language, "විහාරස්ථානය පිළිබඳ", "About the Temple"), null, onBack) }
@@ -658,7 +620,7 @@ private fun AboutScreen(language: AppLanguage, onBack: () -> Unit) {
                     Text("Kolalagala Ancient Temple", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = TempleDeepGold)
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        tr(language, "විහාරස්ථානයේ නිල ඉතිහාසය, නායක හිමිවරුන්ගේ තොරතුරු සහ වැදගත් ස්ථාන මෙහි එක් කළ හැක.", "The temple's verified history, information about resident monks, and significant places can be published here."),
+                        tr(language, "කොළලෑගල පුරාණ විහාරස්ථානයේ නිල තොරතුරු, ඉතිහාසය සහ ආගමික වැඩසටහන් මෙම යෙදුම හරහා දැනගත හැක.", "Official temple information, history and religious programs are available through this app."),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -668,26 +630,39 @@ private fun AboutScreen(language: AppLanguage, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ContactScreen(language: AppLanguage, onBack: () -> Unit) {
+private fun ContactScreen(language: AppLanguage, settings: TempleSettings, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { PageHeader(tr(language, "සම්බන්ධ වන්න", "Contact"), null, onBack) }
-        item {
-            Card(Modifier.fillMaxWidth().padding(18.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ContactLine(Icons.Default.LocationOn, tr(language, "කොළලෑගල පුරාණ විහාරස්ථානය", "Kolalagala Ancient Temple"))
-                    ContactLine(Icons.Default.Phone, tr(language, "නිල දුරකථන අංකය එක් කරන්න", "Add the official temple phone number"))
-                }
-            }
-        }
+        item { PageHeader(tr(language, "සම්බන්ධ වන්න", "Contact"), tr(language, "දායක සභාවේ නිල සම්බන්ධතා", "Official committee contacts"), onBack) }
+        item { ContactPersonCard(language, tr(language, "සභාපති", "President"), settings.sabhapathiNameSi, settings.sabhapathiNameEn, settings.sabhapathiPhone) }
+        item { ContactPersonCard(language, tr(language, "භාණ්ඩාගාරික", "Treasurer"), settings.bandagarikaNameSi, settings.bandagarikaNameEn, settings.bandagarikaPhone) }
+        item { ContactPersonCard(language, tr(language, "ලේකම්", "Secretary"), settings.lekamNameSi, settings.lekamNameEn, settings.lekamPhone) }
     }
 }
 
 @Composable
-private fun ContactLine(icon: ImageVector, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = TempleGold)
-        Spacer(Modifier.width(12.dp))
-        Text(text)
+private fun ContactPersonCard(language: AppLanguage, role: String, nameSi: String, nameEn: String, phone: String) {
+    val context = LocalContext.current
+    val name = tr(language, nameSi, nameEn)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 7.dp)
+            .clickable(enabled = phone.isNotBlank()) {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
+            },
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = CircleShape, color = TempleSoftGold, modifier = Modifier.size(52.dp)) {
+                Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Phone, null, tint = TempleGold) }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(role, color = TempleGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(if (name.isBlank()) tr(language, "නම එක් කර නැත", "Name not added") else name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(if (phone.isBlank()) tr(language, "දුරකථන අංකය එක් කර නැත", "Phone number not added") else phone, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (phone.isNotBlank()) Icon(Icons.Default.ChevronRight, null, tint = TempleDeepGold)
+        }
     }
 }
 
@@ -706,10 +681,7 @@ private fun NoticesScreen(language: AppLanguage, notices: List<TempleNotice>, on
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(tr(language, notice.messageSi, notice.messageEn), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (notice.date.isNotBlank()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(notice.date, color = TempleDeepGold, fontSize = 12.sp)
-                    }
+                    if (notice.date.isNotBlank()) Text(notice.date, color = TempleDeepGold, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
                 }
             }
         }
@@ -731,7 +703,7 @@ private fun AdminScreen(
     repository: TempleRepository,
     events: List<TempleEvent>,
     notices: List<TempleNotice>,
-    gallery: List<GalleryImage>,
+    settings: TempleSettings,
     onBack: () -> Unit
 ) {
     var signedIn by remember { mutableStateOf(repository.isSignedIn()) }
@@ -741,32 +713,17 @@ private fun AdminScreen(
     val context = LocalContext.current
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 30.dp)) {
-        item { PageHeader(tr(language, "පරිපාලක පැනලය", "Temple Admin"), tr(language, "දැනුම්දීම්, පිංකම් සහ ඡායාරූප පාලනය", "Manage announcements, events and gallery"), onBack) }
+        item { PageHeader(tr(language, "පරිපාලක පැනලය", "Temple Admin"), tr(language, "දැනුම්දීම්, පිංකම් සහ විහාර තොරතුරු පාලනය", "Manage announcements, events and temple information"), onBack) }
 
         if (!repository.firebaseReady) {
-            item {
-                Card(Modifier.fillMaxWidth().padding(18.dp), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0E5))) {
-                    Column(Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CloudOff, null, tint = Color(0xFFB85C26))
-                            Spacer(Modifier.width(10.dp))
-                            Text(tr(language, "Firebase සම්බන්ධ කර නැත", "Firebase is not configured"), fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            tr(language, "Firebase Console එකෙන් Android app එකක් සාදා google-services.json ගොනුව app/ ෆෝල්ඩරයට එක් කළ පසු Admin Login සක්‍රීය වේ.", "Create the Android app in Firebase Console and add google-services.json to the app/ folder. Admin Login will then become active."),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            item { EmptyState(tr(language, "Firebase සම්බන්ධ කර නැත", "Firebase is not configured")) }
         } else if (!signedIn) {
             item {
                 Card(Modifier.fillMaxWidth().padding(18.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(Modifier.padding(22.dp)) {
                         Icon(Icons.Default.Lock, null, tint = TempleGold, modifier = Modifier.size(42.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text(tr(language, "Admin Login", "Admin Login"), fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                        Text("Admin Login", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Spacer(Modifier.height(16.dp))
                         OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(10.dp))
@@ -776,12 +733,8 @@ private fun AdminScreen(
                             onClick = {
                                 status = tr(language, "පිවිසෙමින්...", "Signing in...")
                                 repository.signInAdmin(email, password) { result ->
-                                    if (result.isSuccess) {
-                                        signedIn = true
-                                        status = ""
-                                    } else {
-                                        status = result.exceptionOrNull()?.message.orEmpty()
-                                    }
+                                    if (result.isSuccess) { signedIn = true; status = "" }
+                                    else status = result.exceptionOrNull()?.message.orEmpty()
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -806,7 +759,7 @@ private fun AdminScreen(
                 }
             }
             item {
-                AdminManager(language, repository, events, notices, gallery) { message ->
+                AdminManager(language, repository, events, notices, settings) { message ->
                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
             }
@@ -820,7 +773,7 @@ private fun AdminManager(
     repository: TempleRepository,
     events: List<TempleEvent>,
     notices: List<TempleNotice>,
-    gallery: List<GalleryImage>,
+    settings: TempleSettings,
     toast: (String) -> Unit
 ) {
     var section by remember { mutableIntStateOf(0) }
@@ -828,13 +781,13 @@ private fun AdminManager(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = section == 0, onClick = { section = 0 }, label = { Text(tr(language, "දැනුම්දීම්", "Announcements")) })
             FilterChip(selected = section == 1, onClick = { section = 1 }, label = { Text(tr(language, "පිංකම්", "Events")) })
-            FilterChip(selected = section == 2, onClick = { section = 2 }, label = { Text(tr(language, "ඡායාරූප", "Photos")) })
+            FilterChip(selected = section == 2, onClick = { section = 2 }, label = { Text(tr(language, "විහාර තොරතුරු", "Temple Info")) })
         }
         Spacer(Modifier.height(12.dp))
         when (section) {
             0 -> AnnouncementManager(language, repository, notices, toast)
             1 -> EventManager(language, repository, events, toast)
-            else -> PhotoManager(language, repository, gallery, toast)
+            else -> TempleInfoManager(language, repository, settings, toast)
         }
     }
 }
@@ -912,19 +865,7 @@ private fun EventManager(language: AppLanguage, repository: TempleRepository, ev
         }
         Button(
             onClick = {
-                repository.addEvent(
-                    TempleEvent(
-                        titleSi = titleSi,
-                        titleEn = titleEn,
-                        date = date,
-                        time = time,
-                        descriptionSi = descriptionSi,
-                        descriptionEn = descriptionEn,
-                        locationSi = locationSi,
-                        locationEn = locationEn,
-                        notifyUsers = notifyUsers
-                    )
-                ) { result ->
+                repository.addEvent(TempleEvent(titleSi = titleSi, titleEn = titleEn, date = date, time = time, descriptionSi = descriptionSi, descriptionEn = descriptionEn, locationSi = locationSi, locationEn = locationEn, notifyUsers = notifyUsers)) { result ->
                     if (result.isSuccess) {
                         titleSi = ""; titleEn = ""; descriptionSi = ""; descriptionEn = ""; date = ""; time = ""
                         toast(tr(language, "පිංකම එක් කළා", "Event added"))
@@ -950,60 +891,147 @@ private fun EventManager(language: AppLanguage, repository: TempleRepository, ev
 }
 
 @Composable
-private fun PhotoManager(language: AppLanguage, repository: TempleRepository, gallery: List<GalleryImage>, toast: (String) -> Unit) {
-    var titleSi by remember { mutableStateOf("") }
-    var titleEn by remember { mutableStateOf("") }
-    var selectedUri by remember { mutableStateOf<Uri?>(null) }
-    var uploading by remember { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedUri = uri }
+private fun TempleInfoManager(language: AppLanguage, repository: TempleRepository, settings: TempleSettings, toast: (String) -> Unit) {
+    var templeImageUrl by remember(settings.templeImageUrl) { mutableStateOf(settings.templeImageUrl) }
+    var monkImageUrl by remember(settings.monkImageUrl) { mutableStateOf(settings.monkImageUrl) }
+    var monkNameSi by remember(settings.monkNameSi) { mutableStateOf(settings.monkNameSi) }
+    var monkNameEn by remember(settings.monkNameEn) { mutableStateOf(settings.monkNameEn) }
+    var monkTitleSi by remember(settings.monkTitleSi) { mutableStateOf(settings.monkTitleSi) }
+    var monkTitleEn by remember(settings.monkTitleEn) { mutableStateOf(settings.monkTitleEn) }
+    var facebookUrl by remember(settings.facebookUrl) { mutableStateOf(settings.facebookUrl) }
+    var sabhapathiNameSi by remember(settings.sabhapathiNameSi) { mutableStateOf(settings.sabhapathiNameSi) }
+    var sabhapathiNameEn by remember(settings.sabhapathiNameEn) { mutableStateOf(settings.sabhapathiNameEn) }
+    var sabhapathiPhone by remember(settings.sabhapathiPhone) { mutableStateOf(settings.sabhapathiPhone) }
+    var bandagarikaNameSi by remember(settings.bandagarikaNameSi) { mutableStateOf(settings.bandagarikaNameSi) }
+    var bandagarikaNameEn by remember(settings.bandagarikaNameEn) { mutableStateOf(settings.bandagarikaNameEn) }
+    var bandagarikaPhone by remember(settings.bandagarikaPhone) { mutableStateOf(settings.bandagarikaPhone) }
+    var lekamNameSi by remember(settings.lekamNameSi) { mutableStateOf(settings.lekamNameSi) }
+    var lekamNameEn by remember(settings.lekamNameEn) { mutableStateOf(settings.lekamNameEn) }
+    var lekamPhone by remember(settings.lekamPhone) { mutableStateOf(settings.lekamPhone) }
+    var templeUri by remember { mutableStateOf<Uri?>(null) }
+    var monkUri by remember { mutableStateOf<Uri?>(null) }
+    var uploadingTemple by remember { mutableStateOf(false) }
+    var uploadingMonk by remember { mutableStateOf(false) }
 
-    AdminCard(title = tr(language, "නව ඡායාරූපයක්", "Upload Photo"), icon = Icons.Default.AddPhotoAlternate) {
-        OutlinedButton(onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
+    val templePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> templeUri = uri }
+    val monkPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> monkUri = uri }
+
+    AdminCard(tr(language, "විහාර රූපය", "Temple Home Image"), Icons.Default.AddPhotoAlternate) {
+        if (templeUri != null) {
+            AsyncImage(model = templeUri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)))
+        } else if (templeImageUrl.isNotBlank()) {
+            AsyncImage(model = templeImageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)))
+        } else {
+            Image(painterResource(R.drawable.temple_home), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)))
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = { templePicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.AddPhotoAlternate, null)
             Spacer(Modifier.width(8.dp))
-            Text(tr(language, "දුරකථනයෙන් ඡායාරූපයක් තෝරන්න", "Choose photo from phone"))
+            Text(tr(language, "විහාර රූපය තෝරන්න", "Choose Temple Image"))
         }
-        selectedUri?.let { uri ->
-            Spacer(Modifier.height(10.dp))
-            AsyncImage(model = uri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)))
-        }
-        AdminField(titleSi, { titleSi = it }, "සිංහල මාතෘකාව")
-        AdminField(titleEn, { titleEn = it }, "English title")
         Button(
             onClick = {
-                val uri = selectedUri ?: return@Button
-                uploading = true
-                repository.uploadGalleryImage(uri, titleSi, titleEn) { result ->
-                    uploading = false
-                    if (result.isSuccess) {
-                        selectedUri = null; titleSi = ""; titleEn = ""
-                        toast(tr(language, "ඡායාරූපය එක් කළා", "Photo uploaded"))
-                    } else toast(result.exceptionOrNull()?.message ?: "Error")
+                val uri = templeUri ?: return@Button
+                uploadingTemple = true
+                repository.uploadSettingsImage(uri, "temple_home") { result ->
+                    uploadingTemple = false
+                    result.onSuccess { url -> templeImageUrl = url; templeUri = null; toast(tr(language, "රූපය upload වුණා. දැන් Save කරන්න.", "Image uploaded. Now press Save.")) }
+                        .onFailure { toast(it.message ?: "Upload failed") }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = selectedUri != null && !uploading
-        ) { Text(if (uploading) tr(language, "Upload වෙමින්...", "Uploading...") else tr(language, "Upload කරන්න", "Upload Photo")) }
+            enabled = templeUri != null && !uploadingTemple
+        ) { Text(if (uploadingTemple) tr(language, "Upload වෙමින්...", "Uploading...") else tr(language, "විහාර රූපය Upload කරන්න", "Upload Temple Image")) }
     }
 
-    Spacer(Modifier.height(16.dp))
-    AdminListTitle(tr(language, "ගැලරි ඡායාරූප", "Gallery photos"))
-    gallery.forEach { photo ->
-        Card(Modifier.fillMaxWidth().padding(vertical = 5.dp), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = photo.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
-                Spacer(Modifier.width(12.dp))
-                Text(tr(language, photo.titleSi, photo.titleEn), modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                IconButton(onClick = { repository.deleteGalleryImage(photo) { result -> if (result.isFailure) toast(result.exceptionOrNull()?.message ?: "Error") } }) {
-                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
-                }
-            }
+    Spacer(Modifier.height(14.dp))
+    AdminCard(tr(language, "ස්වාමීන් වහන්සේ", "Temple Monk"), Icons.Default.Person) {
+        if (monkUri != null) {
+            AsyncImage(model = monkUri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)))
+        } else if (monkImageUrl.isNotBlank()) {
+            AsyncImage(model = monkImageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)))
         }
+        OutlinedButton(onClick = { monkPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Icon(Icons.Default.AddPhotoAlternate, null)
+            Spacer(Modifier.width(8.dp))
+            Text(tr(language, "ස්වාමීන් වහන්සේගේ රූපය තෝරන්න", "Choose Monk Photo"))
+        }
+        Button(
+            onClick = {
+                val uri = monkUri ?: return@Button
+                uploadingMonk = true
+                repository.uploadSettingsImage(uri, "monk") { result ->
+                    uploadingMonk = false
+                    result.onSuccess { url -> monkImageUrl = url; monkUri = null; toast(tr(language, "රූපය upload වුණා. දැන් Save කරන්න.", "Image uploaded. Now press Save.")) }
+                        .onFailure { toast(it.message ?: "Upload failed") }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = monkUri != null && !uploadingMonk
+        ) { Text(if (uploadingMonk) tr(language, "Upload වෙමින්...", "Uploading...") else tr(language, "ස්වාමීන් වහන්සේගේ රූපය Upload කරන්න", "Upload Monk Photo")) }
+        AdminField(monkNameSi, { monkNameSi = it }, "ස්වාමීන් වහන්සේගේ නම - සිංහල")
+        AdminField(monkNameEn, { monkNameEn = it }, "Monk name - English")
+        AdminField(monkTitleSi, { monkTitleSi = it }, "තනතුර - සිංහල")
+        AdminField(monkTitleEn, { monkTitleEn = it }, "Title - English")
     }
+
+    Spacer(Modifier.height(14.dp))
+    AdminCard("Facebook", Icons.Default.Public) {
+        AdminField(facebookUrl, { facebookUrl = it }, "Facebook Page URL")
+    }
+
+    Spacer(Modifier.height(14.dp))
+    AdminCard(tr(language, "දායක සභා සම්බන්ධතා", "Committee Contacts"), Icons.Default.Phone) {
+        Text(tr(language, "සභාපති", "President"), fontWeight = FontWeight.Bold, color = TempleDeepGold)
+        AdminField(sabhapathiNameSi, { sabhapathiNameSi = it }, "සභාපති නම - සිංහල")
+        AdminField(sabhapathiNameEn, { sabhapathiNameEn = it }, "President name - English")
+        AdminField(sabhapathiPhone, { sabhapathiPhone = it }, "President phone")
+
+        Text(tr(language, "භාණ්ඩාගාරික", "Treasurer"), fontWeight = FontWeight.Bold, color = TempleDeepGold, modifier = Modifier.padding(top = 8.dp))
+        AdminField(bandagarikaNameSi, { bandagarikaNameSi = it }, "භාණ්ඩාගාරික නම - සිංහල")
+        AdminField(bandagarikaNameEn, { bandagarikaNameEn = it }, "Treasurer name - English")
+        AdminField(bandagarikaPhone, { bandagarikaPhone = it }, "Treasurer phone")
+
+        Text(tr(language, "ලේකම්", "Secretary"), fontWeight = FontWeight.Bold, color = TempleDeepGold, modifier = Modifier.padding(top = 8.dp))
+        AdminField(lekamNameSi, { lekamNameSi = it }, "ලේකම් නම - සිංහල")
+        AdminField(lekamNameEn, { lekamNameEn = it }, "Secretary name - English")
+        AdminField(lekamPhone, { lekamPhone = it }, "Secretary phone")
+    }
+
+    Spacer(Modifier.height(14.dp))
+    Button(
+        onClick = {
+            repository.saveSettings(
+                TempleSettings(
+                    templeImageUrl = templeImageUrl,
+                    monkImageUrl = monkImageUrl,
+                    monkNameSi = monkNameSi,
+                    monkNameEn = monkNameEn,
+                    monkTitleSi = monkTitleSi,
+                    monkTitleEn = monkTitleEn,
+                    facebookUrl = facebookUrl,
+                    sabhapathiNameSi = sabhapathiNameSi,
+                    sabhapathiNameEn = sabhapathiNameEn,
+                    sabhapathiPhone = sabhapathiPhone,
+                    bandagarikaNameSi = bandagarikaNameSi,
+                    bandagarikaNameEn = bandagarikaNameEn,
+                    bandagarikaPhone = bandagarikaPhone,
+                    lekamNameSi = lekamNameSi,
+                    lekamNameEn = lekamNameEn,
+                    lekamPhone = lekamPhone
+                )
+            ) { result ->
+                if (result.isSuccess) toast(tr(language, "විහාර තොරතුරු Save කළා", "Temple information saved"))
+                else toast(result.exceptionOrNull()?.message ?: "Save failed")
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) { Text(tr(language, "සියලු තොරතුරු Save කරන්න", "Save All Temple Information")) }
 }
 
 @Composable
-private fun AdminCard(title: String, icon: ImageVector, content: @Composable Column.() -> Unit) {
+private fun AdminCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
