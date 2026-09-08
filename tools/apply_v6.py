@@ -45,19 +45,21 @@ write_gzip_b64(
 )
 write_gzip_b64("app/build.gradle.kts", "app_gradle.b64")
 
-# User-provided temple photograph embedded in the APK for reliable offline display.
+# Current user-provided temple photograph embedded in the APK for reliable offline display.
 write_b64(
     "app/src/main/res/drawable-nodpi/temple_banner.jpg",
-    read_parts("temple_1.b64", "temple_2.b64")
+    read_parts("temple_new_1.b64", "temple_new_2.b64", "temple_new_3.b64", "temple_new_4.b64")
 )
 
-# Viharaadhipathi portrait prepared from the user's supplied monk photograph.
-monk_payload = (ROOT / "tools" / "viharaadhipathi_portrait.b64").read_text(encoding="utf-8").strip()
-write_b64("app/src/main/res/drawable-nodpi/viharaadhipathi_portrait.jpg", monk_payload)
+# Current Viharadhipathi portrait embedded in the APK for reliable offline display.
+write_b64(
+    "app/src/main/res/drawable-nodpi/viharaadhipathi_portrait.jpg",
+    read_parts("monk_new_1.b64", "monk_new_2.b64")
+)
 
 # Remove the temporary V6 placeholder if present.
 temp = ROOT / "app/src/main/java/com/catools/templeapp/ui/TempleAppUiV6.kt"
 if temp.exists():
     temp.unlink()
 
-print("Stable V6 source and embedded images applied")
+print("Stable V6 source and current embedded images applied")
