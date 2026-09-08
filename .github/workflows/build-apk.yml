@@ -44,3 +44,5 @@ jobs:
           name: Kolalagala-Temple-v1.1-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+# Rebuild with current temple and Viharadhipathi images.
